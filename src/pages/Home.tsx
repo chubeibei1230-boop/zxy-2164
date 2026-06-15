@@ -8,6 +8,7 @@ import CheckPanel from '@/components/CheckPanel'
 import BatchOverview from '@/components/BatchOverview'
 import HandoverChecklist from '@/components/HandoverChecklist'
 import DiscrepancyHandler from '@/components/DiscrepancyHandler'
+import OnsitePlan from '@/components/OnsitePlan'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import {
   Plus,
@@ -18,6 +19,7 @@ import {
   Trash2,
   ClipboardList,
   FileWarning,
+  ClipboardCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -121,6 +123,18 @@ export default function Home() {
                 <FileWarning size={13} />
                 差异处理
               </button>
+              <button
+                onClick={() => setViewMode('plan')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                  viewMode === 'plan'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                )}
+              >
+                <ClipboardCheck size={13} />
+                发放预案
+              </button>
             </div>
 
             {!isEmpty && (
@@ -189,8 +203,10 @@ export default function Home() {
           <BatchOverview />
         ) : viewMode === 'handover' ? (
           <HandoverChecklist />
-        ) : (
+        ) : viewMode === 'discrepancy' ? (
           <DiscrepancyHandler />
+        ) : (
+          <OnsitePlan />
         )}
       </main>
 

@@ -14,8 +14,14 @@ import {
   DiscrepancyType,
   DiscrepancyStatus,
   DiscrepancyResult,
+  PlanGroupBy,
+  PlanGroupItem,
+  PlanItemStats,
+  PlanStatus,
+  PlanFilter,
 } from '@/types'
 import { runChecks } from '@/utils/validators'
+import { generatePlanItems } from '@/utils/planGenerator'
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9)
@@ -35,6 +41,15 @@ interface WristbandStore {
   handoverPersonFilter: string
   discrepancyRecords: DiscrepancyRecord[]
   discrepancyFilter: DiscrepancyFilter
+  planGroupBy: PlanGroupBy
+  planFilter: PlanFilter
+  planStatus: PlanStatus
+  planItems: PlanGroupItem[]
+  planSummary: PlanItemStats
+  planName: string
+  planConfirmedAt: string | null
+  planCompletedAt: string | null
+  planLastGenerated: string | null
 
   addRecord: (record: Omit<WristbandRecord, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateRecord: (id: string, data: Partial<WristbandRecord>) => void
@@ -67,6 +82,15 @@ interface WristbandStore {
   resetDiscrepancyFilter: () => void
   getFilteredDiscrepancies: () => DiscrepancyRecord[]
   resolveDiscrepancy: (id: string, result: DiscrepancyResult, resolution: string) => void
+  generatePlan: () => void
+  setPlanGroupBy: (groupBy: PlanGroupBy) => void
+  setPlanFilter: (filter: Partial<PlanFilter>) => void
+  resetPlanFilter: () => void
+  setPlanItemOrder: (itemId: string, newOrder: number) => void
+  movePlanItem: (itemId: string, direction: 'up' | 'down') => void
+  setPlanItemNotes: (itemId: string, notes: string) => void
+  setPlanStatus: (status: PlanStatus) => void
+  setPlanName: (name: string) => void
 }
 
 function buildDemoData(): WristbandRecord[] {
@@ -111,6 +135,23 @@ const defaultDiscrepancyFilter: DiscrepancyFilter = {
   status: '',
 }
 
+const defaultPlanFilter: PlanFilter = {
+  batchName: '',
+  color: '',
+  targetGroup: '',
+  responsiblePerson: '',
+  status: '',
+}
+
+const emptyPlanSummary: PlanItemStats = {
+  pendingQty: 0,
+  availableQty: 0,
+  deferredQty: 0,
+  reviewQty: 0,
+  abnormalQty: 0,
+  totalQty: 0,
+}
+
 function matchesFilters(record: WristbandRecord, filters: FilterState) {
   if (filters.color && record.color !== filters.color) return false
   if (filters.responsiblePerson && record.responsiblePerson !== filters.responsiblePerson) return false
@@ -135,6 +176,15 @@ export const useWristbandStore = create<WristbandStore>()(
       handoverPersonFilter: '',
       discrepancyRecords: [],
       discrepancyFilter: { ...defaultDiscrepancyFilter },
+      planGroupBy: 'batchName',
+      planFilter: { ...defaultPlanFilter },
+      planStatus: '草稿',
+      planItems: [],
+      planSummary: { ...emptyPlanSummary },
+      planName: '现场发放预案',
+      planConfirmedAt: null,
+      planCompletedAt: null,
+      planLastGenerated: null,
 
       addRecord: (record) => {
         const now = new Date().toISOString()
@@ -149,6 +199,9 @@ export const useWristbandStore = create<WristbandStore>()(
           const checkResults = runChecks(records)
           return { records, checkResults }
         })
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       updateRecord: (id, data) => {
@@ -163,6 +216,9 @@ export const useWristbandStore = create<WristbandStore>()(
           const checkResults = runChecks(records)
           return { records, selectedIds, checkResults }
         })
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       deleteRecord: (id) => {
@@ -174,6 +230,9 @@ export const useWristbandStore = create<WristbandStore>()(
           const checkResults = runChecks(records)
           return { records, selectedIds, handoverRecords, discrepancyRecords, checkResults }
         })
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       deleteRecords: (ids) => {
@@ -186,6 +245,9 @@ export const useWristbandStore = create<WristbandStore>()(
           const checkResults = runChecks(records)
           return { records, selectedIds, handoverRecords, discrepancyRecords, checkResults }
         })
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       setFilters: (newFilters) => {
@@ -228,11 +290,17 @@ export const useWristbandStore = create<WristbandStore>()(
           const checkResults = runChecks(records)
           return { records, checkResults, selectedIds: [] }
         })
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       setViewMode: (mode) => {
         set({ viewMode: mode })
         get().runAutoCheck()
+        if (mode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       setCheckScope: (scope) => {
@@ -377,6 +445,9 @@ export const useWristbandStore = create<WristbandStore>()(
           const checkResults = runChecks(records)
           return { handoverRecords, records, checkResults }
         })
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       getHandoverStatus: (recordId) => {
@@ -403,6 +474,9 @@ export const useWristbandStore = create<WristbandStore>()(
         set((state) => ({
           discrepancyRecords: [...state.discrepancyRecords, newRecord],
         }))
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       updateDiscrepancy: (id, data) => {
@@ -411,12 +485,18 @@ export const useWristbandStore = create<WristbandStore>()(
             d.id === id ? { ...d, ...data } : d
           ),
         }))
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       deleteDiscrepancy: (id) => {
         set((state) => ({
           discrepancyRecords: state.discrepancyRecords.filter((d) => d.id !== id),
         }))
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       setDiscrepancyFilter: (filter) => {
@@ -488,10 +568,125 @@ export const useWristbandStore = create<WristbandStore>()(
           const checkResults = runChecks(records)
           return { discrepancyRecords: updated, handoverRecords, records, checkResults }
         })
+        if (get().viewMode === 'plan') {
+          get().generatePlan()
+        }
       },
 
       resetHandoverStatuses: () => {
         set({ handoverRecords: [] })
+      },
+
+      generatePlan: () => {
+        const { records, handoverRecords, discrepancyRecords, planGroupBy, planFilter, planItems } = get()
+        const { items, summary } = generatePlanItems(
+          records,
+          handoverRecords,
+          discrepancyRecords,
+          planGroupBy,
+          planFilter
+        )
+
+        const mergedItems = items.map((newItem) => {
+          const existing = planItems.find(
+            (e) => e.groupKey === newItem.groupKey && e.groupValue === newItem.groupValue
+          )
+          if (existing) {
+            return {
+              ...newItem,
+              id: existing.id,
+              displayOrder: existing.displayOrder,
+              siteNotes: existing.siteNotes,
+            }
+          }
+          return newItem
+        })
+
+        mergedItems.sort((a, b) => a.displayOrder - b.displayOrder)
+
+        set({
+          planItems: mergedItems,
+          planSummary: summary,
+          planLastGenerated: new Date().toISOString(),
+        })
+      },
+
+      setPlanGroupBy: (groupBy) => {
+        set({ planGroupBy: groupBy })
+        get().generatePlan()
+      },
+
+      setPlanFilter: (filter) => {
+        set((state) => ({
+          planFilter: { ...state.planFilter, ...filter },
+        }))
+        get().generatePlan()
+      },
+
+      resetPlanFilter: () => {
+        set({ planFilter: { ...defaultPlanFilter } })
+        get().generatePlan()
+      },
+
+      setPlanItemOrder: (itemId, newOrder) => {
+        set((state) => {
+          const items = [...state.planItems]
+          const itemIndex = items.findIndex((i) => i.id === itemId)
+          if (itemIndex === -1) return state
+
+          const item = items[itemIndex]
+          const oldOrder = item.displayOrder
+
+          if (newOrder < 1 || newOrder > items.length) return state
+
+          items.forEach((i) => {
+            if (i.id === itemId) {
+              i.displayOrder = newOrder
+            } else if (oldOrder < newOrder && i.displayOrder > oldOrder && i.displayOrder <= newOrder) {
+              i.displayOrder -= 1
+            } else if (oldOrder > newOrder && i.displayOrder >= newOrder && i.displayOrder < oldOrder) {
+              i.displayOrder += 1
+            }
+          })
+
+          items.sort((a, b) => a.displayOrder - b.displayOrder)
+
+          return { planItems: items }
+        })
+      },
+
+      movePlanItem: (itemId, direction) => {
+        const item = get().planItems.find((i) => i.id === itemId)
+        if (!item) return
+
+        const newOrder = direction === 'up' ? item.displayOrder - 1 : item.displayOrder + 1
+        get().setPlanItemOrder(itemId, newOrder)
+      },
+
+      setPlanItemNotes: (itemId, notes) => {
+        set((state) => ({
+          planItems: state.planItems.map((i) =>
+            i.id === itemId ? { ...i, siteNotes: notes } : i
+          ),
+        }))
+      },
+
+      setPlanStatus: (status) => {
+        const now = new Date().toISOString()
+        set((state) => {
+          const updates: Partial<WristbandStore> = { planStatus: status }
+          if (status === '已确认' && !state.planConfirmedAt) {
+            updates.planConfirmedAt = now
+          }
+          if (status === '已完成') {
+            updates.planCompletedAt = now
+          }
+          return updates
+        })
+      },
+
+      setPlanName: (name) => {
+        set({ planName: name })
       },
     }),
     {
@@ -500,6 +695,13 @@ export const useWristbandStore = create<WristbandStore>()(
         records: state.records,
         handoverRecords: state.handoverRecords,
         discrepancyRecords: state.discrepancyRecords,
+        planItems: state.planItems,
+        planGroupBy: state.planGroupBy,
+        planFilter: state.planFilter,
+        planStatus: state.planStatus,
+        planName: state.planName,
+        planConfirmedAt: state.planConfirmedAt,
+        planCompletedAt: state.planCompletedAt,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
