@@ -248,6 +248,11 @@ export const useWristbandStore = create<WristbandStore>()(
       setHandoverStatus: (recordId, status) => {
         set((state) => {
           const now = new Date().toISOString()
+          const wristbandStatusByHandover: Partial<Record<HandoverStatus, WristbandStatus>> = {
+            '已确认': '可发放',
+            '暂缓': '暂缓',
+            '退回复核': '待复核',
+          }
           const existing = state.handoverRecords.find((h) => h.recordId === recordId)
           let handoverRecords: HandoverRecord[]
           if (existing) {
@@ -257,7 +262,14 @@ export const useWristbandStore = create<WristbandStore>()(
           } else {
             handoverRecords = [...state.handoverRecords, { recordId, status, updatedAt: now }]
           }
-          return { handoverRecords }
+          const wristbandStatus = wristbandStatusByHandover[status]
+          if (!wristbandStatus) return { handoverRecords }
+
+          const records = state.records.map((r) =>
+            r.id === recordId ? { ...r, status: wristbandStatus, updatedAt: now } : r
+          )
+          const checkResults = runChecks(records)
+          return { handoverRecords, records, checkResults }
         })
       },
 

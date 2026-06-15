@@ -62,6 +62,16 @@ export default function HandoverChecklist() {
     return ids
   }, [filtered, getHandoverStatus])
 
+  const abnormalQuickFilterIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const r of filtered) {
+      const hs = getHandoverStatus(r.id)
+      if (r.notes && r.notes.trim() !== '') ids.add(r.id)
+      if (hs === '暂缓' || hs === '退回复核') ids.add(r.id)
+    }
+    return ids
+  }, [filtered, getHandoverStatus])
+
   const displayRecords = useMemo(() => {
     let result = filtered
 
@@ -71,7 +81,7 @@ export default function HandoverChecklist() {
         return hs === '待确认'
       })
     } else if (handoverQuickFilter === 'abnormal') {
-      result = result.filter((r) => hasNoteIds.has(r.id))
+      result = result.filter((r) => abnormalQuickFilterIds.has(r.id))
     } else if (handoverQuickFilter === 'byPerson') {
       if (handoverPersonFilter) {
         result = result.filter((r) => r.responsiblePerson === handoverPersonFilter)
@@ -79,7 +89,7 @@ export default function HandoverChecklist() {
     }
 
     return result
-  }, [filtered, handoverQuickFilter, handoverPersonFilter, hasNoteIds, getHandoverStatus])
+  }, [filtered, handoverQuickFilter, handoverPersonFilter, abnormalQuickFilterIds, getHandoverStatus])
 
   const stats = useMemo(() => {
     let totalQty = 0
@@ -92,11 +102,11 @@ export default function HandoverChecklist() {
       const hs = getHandoverStatus(r.id)
       if (hs === '待确认') pendingQty += r.quantity
       if (hs === '暂缓') suspendedQty += r.quantity
-      if (hasNoteIds.has(r.id)) abnormalCount += 1
+      if (abnormalQuickFilterIds.has(r.id)) abnormalCount += 1
     }
 
     return { totalQty, pendingQty, suspendedQty, abnormalCount, recordCount: filtered.length }
-  }, [filtered, getHandoverStatus, hasNoteIds])
+  }, [filtered, getHandoverStatus, abnormalQuickFilterIds])
 
   const batchMap = useMemo(() => {
     const map = new Map<string, typeof displayRecords>()
@@ -187,7 +197,7 @@ export default function HandoverChecklist() {
               {stats.abnormalCount}
             </div>
             <div className="text-[10px] text-rose-500/80 mt-1">
-              含备注内容的记录
+              含备注或交接异常
             </div>
           </div>
         </div>
