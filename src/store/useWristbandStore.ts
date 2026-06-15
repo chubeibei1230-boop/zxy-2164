@@ -6,6 +6,9 @@ import {
   FilterState,
   ViewMode,
   CheckResult,
+  HandoverRecord,
+  HandoverStatus,
+  HandoverQuickFilter,
 } from '@/types'
 import { runChecks } from '@/utils/validators'
 
@@ -22,6 +25,9 @@ interface WristbandStore {
   checkScope: 'all' | 'filtered'
   editingRecord: WristbandRecord | null
   showForm: boolean
+  handoverRecords: HandoverRecord[]
+  handoverQuickFilter: HandoverQuickFilter
+  handoverPersonFilter: string
 
   addRecord: (record: Omit<WristbandRecord, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateRecord: (id: string, data: Partial<WristbandRecord>) => void
@@ -42,6 +48,11 @@ interface WristbandStore {
   runAutoCheck: () => void
   seedDemoData: () => void
   clearAll: () => void
+  setHandoverStatus: (recordId: string, status: HandoverStatus) => void
+  getHandoverStatus: (recordId: string) => HandoverStatus
+  setHandoverQuickFilter: (filter: HandoverQuickFilter) => void
+  setHandoverPersonFilter: (person: string) => void
+  resetHandoverStatuses: () => void
 }
 
 function buildDemoData(): WristbandRecord[] {
@@ -96,6 +107,9 @@ export const useWristbandStore = create<WristbandStore>()(
       checkScope: 'filtered',
       editingRecord: null,
       showForm: false,
+      handoverRecords: [],
+      handoverQuickFilter: 'all',
+      handoverPersonFilter: '',
 
       addRecord: (record) => {
         const now = new Date().toISOString()
@@ -228,13 +242,47 @@ export const useWristbandStore = create<WristbandStore>()(
       },
 
       clearAll: () => {
-        set({ records: [], checkResults: [], selectedIds: [] })
+        set({ records: [], checkResults: [], selectedIds: [], handoverRecords: [] })
+      },
+
+      setHandoverStatus: (recordId, status) => {
+        set((state) => {
+          const now = new Date().toISOString()
+          const existing = state.handoverRecords.find((h) => h.recordId === recordId)
+          let handoverRecords: HandoverRecord[]
+          if (existing) {
+            handoverRecords = state.handoverRecords.map((h) =>
+              h.recordId === recordId ? { ...h, status, updatedAt: now } : h
+            )
+          } else {
+            handoverRecords = [...state.handoverRecords, { recordId, status, updatedAt: now }]
+          }
+          return { handoverRecords }
+        })
+      },
+
+      getHandoverStatus: (recordId) => {
+        const h = get().handoverRecords.find((r) => r.recordId === recordId)
+        return h?.status ?? '待确认'
+      },
+
+      setHandoverQuickFilter: (filter) => {
+        set({ handoverQuickFilter: filter })
+      },
+
+      setHandoverPersonFilter: (person) => {
+        set({ handoverPersonFilter: person })
+      },
+
+      resetHandoverStatuses: () => {
+        set({ handoverRecords: [] })
       },
     }),
     {
       name: 'wristband-color-group-data',
       partialize: (state) => ({
         records: state.records,
+        handoverRecords: state.handoverRecords,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

@@ -30,7 +30,17 @@ export interface CheckResult {
   recordIds: string[]
 }
 
-export type ViewMode = 'table' | 'batch'
+export type ViewMode = 'table' | 'batch' | 'handover'
+
+export type HandoverStatus = '待确认' | '已确认' | '暂缓' | '退回复核'
+
+export interface HandoverRecord {
+  recordId: string
+  status: HandoverStatus
+  updatedAt: string
+}
+
+export type HandoverQuickFilter = 'all' | 'pending' | 'abnormal' | 'byPerson'
 
 export const STATUS_LIST: WristbandStatus[] = ['待分装', '待复核', '可发放', '暂缓']
 
@@ -64,4 +74,13 @@ export const CHECK_LEVEL_BG: Record<CheckLevel, string> = {
   '严重': 'bg-red-500/10 border-red-500/30',
   '警告': 'bg-amber-500/10 border-amber-500/30',
   '提示': 'bg-sky-500/10 border-sky-500/30',
+}
+
+export const HANDOVER_STATUS_LIST: HandoverStatus[] = ['待确认', '已确认', '暂缓', '退回复核']
+
+export const HANDOVER_STATUS_COLOR: Record<HandoverStatus, string> = {
+  '待确认': 'bg-sky-500/20 text-sky-300 border-sky-500/40',
+  '已确认': 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+  '暂缓': 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  '退回复核': 'bg-rose-500/20 text-rose-300 border-rose-500/40',
 }

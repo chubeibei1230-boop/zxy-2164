@@ -6,6 +6,7 @@ import FilterBar from '@/components/FilterBar'
 import BatchActions from '@/components/BatchActions'
 import CheckPanel from '@/components/CheckPanel'
 import BatchOverview from '@/components/BatchOverview'
+import HandoverChecklist from '@/components/HandoverChecklist'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import {
   Plus,
@@ -14,6 +15,7 @@ import {
   AlertTriangle,
   Sparkles,
   Trash2,
+  ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -93,6 +95,18 @@ export default function Home() {
                 <Package size={13} />
                 批次速览
               </button>
+              <button
+                onClick={() => setViewMode('handover')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                  viewMode === 'handover'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                )}
+              >
+                <ClipboardList size={13} />
+                发放交接
+              </button>
             </div>
 
             {!isEmpty && (
@@ -155,7 +169,13 @@ export default function Home() {
           <CheckPanel />
         </div>
 
-        {viewMode === 'table' ? <RecordTable /> : <BatchOverview />}
+        {viewMode === 'table' ? (
+          <RecordTable />
+        ) : viewMode === 'batch' ? (
+          <BatchOverview />
+        ) : (
+          <HandoverChecklist />
+        )}
       </main>
 
       {showForm && <RecordForm />}
