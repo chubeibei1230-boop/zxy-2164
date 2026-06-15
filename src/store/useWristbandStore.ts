@@ -169,8 +169,10 @@ export const useWristbandStore = create<WristbandStore>()(
         set((state) => {
           const records = state.records.filter((r) => r.id !== id)
           const selectedIds = state.selectedIds.filter((sid) => sid !== id)
+          const handoverRecords = state.handoverRecords.filter((h) => h.recordId !== id)
+          const discrepancyRecords = state.discrepancyRecords.filter((d) => d.recordId !== id)
           const checkResults = runChecks(records)
-          return { records, selectedIds, checkResults }
+          return { records, selectedIds, handoverRecords, discrepancyRecords, checkResults }
         })
       },
 
@@ -179,8 +181,10 @@ export const useWristbandStore = create<WristbandStore>()(
           const idSet = new Set(ids)
           const records = state.records.filter((r) => !idSet.has(r.id))
           const selectedIds = state.selectedIds.filter((sid) => !idSet.has(sid))
+          const handoverRecords = state.handoverRecords.filter((h) => !idSet.has(h.recordId))
+          const discrepancyRecords = state.discrepancyRecords.filter((d) => !idSet.has(d.recordId))
           const checkResults = runChecks(records)
-          return { records, selectedIds, checkResults }
+          return { records, selectedIds, handoverRecords, discrepancyRecords, checkResults }
         })
       },
 
@@ -261,7 +265,11 @@ export const useWristbandStore = create<WristbandStore>()(
       },
 
       seedDemoData: () => {
-        const records = buildDemoData()
+        const records = buildDemoData().map((record, index) =>
+          index === 2 || index === 11
+            ? { ...record, status: '可发放' as WristbandStatus, updatedAt: new Date().toISOString() }
+            : record
+        )
         const checkResults = runChecks(records)
         const now = new Date().toISOString()
         const yesterday = new Date(Date.now() - 86400000).toISOString()
@@ -332,7 +340,7 @@ export const useWristbandStore = create<WristbandStore>()(
 
         const handoverRecords: HandoverRecord[] = records.slice(0, 4).map((r, idx) => ({
           recordId: r.id,
-          status: (['已确认', '待确认', '暂缓', '退回复核'] as HandoverStatus[])[idx],
+          status: (['已确认', '待确认', '已确认', '退回复核'] as HandoverStatus[])[idx],
           updatedAt: now,
         }))
 
@@ -454,32 +462,28 @@ export const useWristbandStore = create<WristbandStore>()(
           const recordId = disc.recordId
           let handoverRecords = state.handoverRecords
           let records = state.records
+          let nextHandoverStatus: HandoverStatus = '已确认'
+          let nextWristbandStatus: WristbandStatus = '可发放'
 
-          if (disc.type === '退回复核' && result === '已调整') {
-            const existing = handoverRecords.find((h) => h.recordId === recordId)
-            if (existing) {
-              handoverRecords = handoverRecords.map((h) =>
-                h.recordId === recordId ? { ...h, status: '已确认' as HandoverStatus, updatedAt: now } : h
-              )
-            } else {
-              handoverRecords = [...handoverRecords, { recordId, status: '已确认' as HandoverStatus, updatedAt: now }]
-            }
-            records = records.map((r) =>
-              r.id === recordId ? { ...r, status: '可发放' as WristbandStatus, updatedAt: now } : r
-            )
-          } else if (disc.type === '暂缓发放' && result === '已取消') {
-            const existing = handoverRecords.find((h) => h.recordId === recordId)
-            if (existing) {
-              handoverRecords = handoverRecords.map((h) =>
-                h.recordId === recordId ? { ...h, status: '已确认' as HandoverStatus, updatedAt: now } : h
-              )
-            } else {
-              handoverRecords = [...handoverRecords, { recordId, status: '已确认' as HandoverStatus, updatedAt: now }]
-            }
-            records = records.map((r) =>
-              r.id === recordId ? { ...r, status: '可发放' as WristbandStatus, updatedAt: now } : r
-            )
+          if (result === '已取消') {
+            nextHandoverStatus = '暂缓'
+            nextWristbandStatus = '暂缓'
+          } else if (disc.type === '退回复核') {
+            nextHandoverStatus = result === '已调整' || result === '已补发' ? '已确认' : '退回复核'
+            nextWristbandStatus = result === '已调整' || result === '已补发' ? '可发放' : '待复核'
           }
+
+          const existing = handoverRecords.find((h) => h.recordId === recordId)
+          if (existing) {
+            handoverRecords = handoverRecords.map((h) =>
+              h.recordId === recordId ? { ...h, status: nextHandoverStatus, updatedAt: now } : h
+            )
+          } else {
+            handoverRecords = [...handoverRecords, { recordId, status: nextHandoverStatus, updatedAt: now }]
+          }
+          records = records.map((r) =>
+            r.id === recordId ? { ...r, status: nextWristbandStatus, updatedAt: now } : r
+          )
 
           const checkResults = runChecks(records)
           return { discrepancyRecords: updated, handoverRecords, records, checkResults }

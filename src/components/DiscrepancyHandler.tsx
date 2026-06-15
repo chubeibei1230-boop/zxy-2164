@@ -187,14 +187,15 @@ function AddDiscrepancyForm({
   const [status, setStatus] = useState<DiscrepancyStatus>('待处理')
 
   const selectedRecord = records.find((r) => r.id === recordId)
+  const canSubmit = Boolean(recordId && description.trim() && affectedQty >= 0)
 
   const handleSubmit = () => {
-    if (!recordId || !description.trim()) return
+    if (!canSubmit) return
     onSubmit({
       recordId,
       type,
       description: description.trim(),
-      affectedQty,
+      affectedQty: Math.floor(affectedQty),
       status,
       result: '',
       resolution: '',
@@ -256,8 +257,9 @@ function AddDiscrepancyForm({
             <input
               type="number"
               min={0}
+              step={1}
               value={affectedQty}
-              onChange={(e) => setAffectedQty(Number(e.target.value))}
+              onChange={(e) => setAffectedQty(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
               className="w-full rounded-lg bg-zinc-800/80 border border-zinc-700/50 px-3 py-2 text-sm text-zinc-200 tabular-nums focus:outline-none focus:border-indigo-500/60"
             />
           </div>
@@ -303,10 +305,10 @@ function AddDiscrepancyForm({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!recordId || !description.trim()}
+            disabled={!canSubmit}
             className={cn(
               'px-4 py-2 rounded-lg text-white text-xs font-medium transition-colors',
-              recordId && description.trim()
+              canSubmit
                 ? 'bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-600/20'
                 : 'bg-zinc-700 cursor-not-allowed opacity-50'
             )}
@@ -599,7 +601,14 @@ export default function DiscrepancyHandler() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors shadow-lg shadow-indigo-600/20"
+            disabled={records.length === 0}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-xs font-medium transition-colors shadow-lg shadow-indigo-600/20',
+              records.length === 0
+                ? 'bg-zinc-700 cursor-not-allowed opacity-60 shadow-none'
+                : 'bg-indigo-600 hover:bg-indigo-500'
+            )}
+            title={records.length === 0 ? '请先新增手环条目' : '登记差异'}
           >
             <Plus size={14} />
             登记差异
@@ -751,7 +760,9 @@ export default function DiscrepancyHandler() {
         <div className="rounded-xl border border-dashed border-zinc-700/60 bg-zinc-900/20 py-20 text-center">
           <FileWarning size={36} className="mx-auto text-zinc-700 mb-3" />
           <p className="text-sm text-zinc-500">暂无差异记录</p>
-          <p className="text-xs text-zinc-600 mt-1">点击「登记差异」添加现场发放差异</p>
+          <p className="text-xs text-zinc-600 mt-1">
+            {records.length === 0 ? '请先新增手环条目，再登记现场发放差异' : '点击「登记差异」添加现场发放差异'}
+          </p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-700/60 bg-zinc-900/20 py-20 text-center">
@@ -768,7 +779,7 @@ export default function DiscrepancyHandler() {
         <div className="space-y-5">
           {groupedDiscrepancies.map(([groupKey, items]) => {
             const groupAffected = items.reduce((s, d) => s + d.affectedQty, 0)
-            const groupPending = items.filter((d) => d.status !== '已处理').length
+            const groupUnresolved = items.filter((d) => d.status !== '已处理').length
             return (
               <div key={groupKey} className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 overflow-hidden">
                 <div className="px-5 py-3.5 bg-zinc-900/80 border-b border-zinc-800/40">
@@ -778,9 +789,9 @@ export default function DiscrepancyHandler() {
                       <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-[10px] text-zinc-400">
                         {items.length} 条
                       </span>
-                      {groupPending > 0 && (
+                      {groupUnresolved > 0 && (
                         <span className="px-2 py-0.5 rounded-full bg-sky-500/10 text-[10px] text-sky-400 border border-sky-500/20">
-                          {groupPending} 待处理
+                          {groupUnresolved} 未处理
                         </span>
                       )}
                     </div>
