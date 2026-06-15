@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useWristbandStore } from '@/store/useWristbandStore'
 import {
   HANDOVER_STATUS_COLOR,
@@ -7,6 +7,7 @@ import {
   STATUS_COLOR_MAP,
 } from '@/types'
 import { cn, getColorValue } from '@/lib/utils'
+import HandoverOverview from '@/components/HandoverOverview'
 import {
   ClipboardList,
   Users,
@@ -37,6 +38,17 @@ export default function HandoverChecklist() {
 
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
   const [showPersonDropdown, setShowPersonDropdown] = useState(false)
+
+  const navigateToRecord = useCallback((recordId: string) => {
+    const el = document.querySelector(`[data-record-id="${recordId}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ring-2', 'ring-indigo-500/60')
+      setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-indigo-500/60')
+      }, 2000)
+    }
+  }, [])
 
   const filtered = getFilteredRecords()
 
@@ -203,6 +215,8 @@ export default function HandoverChecklist() {
         </div>
       </div>
 
+      <HandoverOverview onNavigateToRecord={navigateToRecord} />
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center bg-zinc-900/80 border border-zinc-800/60 rounded-lg p-0.5 flex-wrap">
           {quickFilters.map(({ key, label, icon: Icon }) => (
@@ -351,8 +365,9 @@ export default function HandoverChecklist() {
                     return (
                       <div
                         key={r.id}
+                        data-record-id={r.id}
                         className={cn(
-                          'px-5 py-3 transition-colors hover:bg-zinc-800/20',
+                          'px-5 py-3 transition-colors hover:bg-zinc-800/20 rounded-lg',
                           isAbnormal && hs === '待确认' && 'bg-rose-500/5',
                           handoverAbnormal && 'bg-amber-500/5'
                         )}
