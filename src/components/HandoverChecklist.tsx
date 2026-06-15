@@ -45,15 +45,22 @@ export default function HandoverChecklist() {
     [filtered]
   )
 
-  const abnormalRecordIds = useMemo(() => {
-    const abnormalNoteIds = new Set(
+  const hasNoteIds = useMemo(() => {
+    return new Set(
       filtered.filter((r) => r.notes && r.notes.trim() !== '').map((r) => r.id)
     )
-    const abnormalStatusIds = new Set(
-      filtered.filter((r) => r.status === '暂缓').map((r) => r.id)
-    )
-    return new Set([...abnormalNoteIds, ...abnormalStatusIds])
   }, [filtered])
+
+  const abnormalRecordIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const r of filtered) {
+      const hs = getHandoverStatus(r.id)
+      if (r.notes && r.notes.trim() !== '') ids.add(r.id)
+      if (r.status === '暂缓') ids.add(r.id)
+      if (hs === '暂缓' || hs === '退回复核') ids.add(r.id)
+    }
+    return ids
+  }, [filtered, getHandoverStatus])
 
   const displayRecords = useMemo(() => {
     let result = filtered
@@ -64,7 +71,7 @@ export default function HandoverChecklist() {
         return hs === '待确认'
       })
     } else if (handoverQuickFilter === 'abnormal') {
-      result = result.filter((r) => abnormalRecordIds.has(r.id))
+      result = result.filter((r) => hasNoteIds.has(r.id))
     } else if (handoverQuickFilter === 'byPerson') {
       if (handoverPersonFilter) {
         result = result.filter((r) => r.responsiblePerson === handoverPersonFilter)
@@ -72,7 +79,7 @@ export default function HandoverChecklist() {
     }
 
     return result
-  }, [filtered, handoverQuickFilter, handoverPersonFilter, abnormalRecordIds, getHandoverStatus])
+  }, [filtered, handoverQuickFilter, handoverPersonFilter, hasNoteIds, getHandoverStatus])
 
   const stats = useMemo(() => {
     let totalQty = 0
@@ -80,16 +87,16 @@ export default function HandoverChecklist() {
     let suspendedQty = 0
     let abnormalCount = 0
 
-    for (const r of displayRecords) {
+    for (const r of filtered) {
       totalQty += r.quantity
       const hs = getHandoverStatus(r.id)
       if (hs === '待确认') pendingQty += r.quantity
       if (hs === '暂缓') suspendedQty += r.quantity
-      if (abnormalRecordIds.has(r.id)) abnormalCount += 1
+      if (hasNoteIds.has(r.id)) abnormalCount += 1
     }
 
-    return { totalQty, pendingQty, suspendedQty, abnormalCount, recordCount: displayRecords.length }
-  }, [displayRecords, getHandoverStatus, abnormalRecordIds])
+    return { totalQty, pendingQty, suspendedQty, abnormalCount, recordCount: filtered.length }
+  }, [filtered, getHandoverStatus, hasNoteIds])
 
   const batchMap = useMemo(() => {
     const map = new Map<string, typeof displayRecords>()
@@ -180,7 +187,7 @@ export default function HandoverChecklist() {
               {stats.abnormalCount}
             </div>
             <div className="text-[10px] text-rose-500/80 mt-1">
-              含异常备注或暂缓状态
+              含备注内容的记录
             </div>
           </div>
         </div>
@@ -327,13 +334,17 @@ export default function HandoverChecklist() {
                   {sortedItems.map((r) => {
                     const hs = getHandoverStatus(r.id)
                     const isAbnormal = abnormalRecordIds.has(r.id)
+                    const hasNote = hasNoteIds.has(r.id)
+                    const wristbandSuspended = r.status === '暂缓'
+                    const handoverAbnormal = hs === '暂缓' || hs === '退回复核'
 
                     return (
                       <div
                         key={r.id}
                         className={cn(
                           'px-5 py-3 transition-colors hover:bg-zinc-800/20',
-                          isAbnormal && hs === '待确认' && 'bg-rose-500/5'
+                          isAbnormal && hs === '待确认' && 'bg-rose-500/5',
+                          handoverAbnormal && 'bg-amber-500/5'
                         )}
                       >
                         <div className="flex items-center gap-4 flex-wrap">
@@ -379,19 +390,29 @@ export default function HandoverChecklist() {
                           {r.notes ? (
                             <div
                               className={cn(
-                                'text-xs px-2 py-0.5 rounded-md max-w-[180px] truncate',
-                                isAbnormal
-                                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                                  : 'bg-zinc-800/60 text-zinc-400'
+                                'text-xs px-2 py-0.5 rounded-md max-w-[180px] truncate border',
+                                hasNote
+                                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                  : 'bg-zinc-800/60 text-zinc-400 border-transparent'
                               )}
                               title={r.notes}
                             >
-                              {isAbnormal && <AlertCircle size={10} className="inline mr-1 -mt-0.5" />}
+                              {hasNote && <AlertCircle size={10} className="inline mr-1 -mt-0.5" />}
                               {r.notes}
                             </div>
                           ) : (
                             <div className="text-xs text-zinc-600 max-w-[180px]">
                               —
+                            </div>
+                          )}
+
+                          {wristbandSuspended && hs === '待确认' && (
+                            <div
+                              className="text-xs px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                              title="手环状态为暂缓，交接请特别注意"
+                            >
+                              <AlertCircle size={10} className="inline mr-1 -mt-0.5" />
+                              手环暂缓
                             </div>
                           )}
 
