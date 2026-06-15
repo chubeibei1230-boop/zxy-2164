@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useWristbandStore } from '@/store/useWristbandStore'
 import { WristbandStatus, STATUS_LIST, COLOR_MAP } from '@/types'
 import { X, Save } from 'lucide-react'
+import { cn, getColorValue } from '@/lib/utils'
 
 const emptyForm = {
   color: '红色',
@@ -72,22 +73,36 @@ export default function RecordForm() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
+          <div className="col-span-2">
             <label className={labelCls}>手环颜色</label>
-            <div className="relative">
-              <select
-                value={form.color}
-                onChange={(e) => setForm({ ...form, color: e.target.value })}
-                className={inputCls}
-              >
-                {Object.keys(COLOR_MAP).map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              <span
-                className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border border-zinc-600"
-                style={{ backgroundColor: COLOR_MAP[form.color] || '#888' }}
-              />
+            <div className="flex items-start gap-3">
+              <div className="relative flex-1">
+                <input
+                  value={form.color}
+                  onChange={(e) => setForm({ ...form, color: e.target.value })}
+                  className={inputCls}
+                  placeholder="输入或选择颜色"
+                />
+                <span
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border border-zinc-600"
+                  style={{ backgroundColor: getColorValue(form.color) }}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {Object.keys(COLOR_MAP).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setForm({ ...form, color: c })}
+                  title={c}
+                  className={cn(
+                    'w-6 h-6 rounded-full border-2 transition-transform hover:scale-110',
+                    form.color === c ? 'border-indigo-400 ring-2 ring-indigo-400/40' : 'border-zinc-700'
+                  )}
+                  style={{ backgroundColor: getColorValue(c) }}
+                />
+              ))}
             </div>
           </div>
 

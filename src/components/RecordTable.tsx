@@ -1,6 +1,6 @@
 import { useWristbandStore } from '@/store/useWristbandStore'
-import { COLOR_MAP, STATUS_COLOR_MAP, WristbandStatus, STATUS_LIST } from '@/types'
-import { cn } from '@/lib/utils'
+import { STATUS_COLOR_MAP, WristbandStatus, STATUS_LIST } from '@/types'
+import { cn, getColorValue } from '@/lib/utils'
 import { Edit3, Trash2, Check, Square } from 'lucide-react'
 import { useState } from 'react'
 
@@ -70,7 +70,7 @@ export default function RecordTable() {
                   <div className="flex items-center gap-2">
                     <span
                       className="w-4 h-4 rounded-full border border-zinc-600/50 shrink-0"
-                      style={{ backgroundColor: COLOR_MAP[r.color] || '#888' }}
+                      style={{ backgroundColor: getColorValue(r.color) }}
                     />
                     <span className="text-zinc-200">{r.color}</span>
                   </div>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useWristbandStore } from '@/store/useWristbandStore'
 import RecordForm from '@/components/RecordForm'
 import RecordTable from '@/components/RecordTable'
@@ -5,7 +6,15 @@ import FilterBar from '@/components/FilterBar'
 import BatchActions from '@/components/BatchActions'
 import CheckPanel from '@/components/CheckPanel'
 import BatchOverview from '@/components/BatchOverview'
-import { Plus, LayoutList, Package, AlertTriangle, Sparkles, Trash2 } from 'lucide-react'
+import ConfirmDialog from '@/components/ConfirmDialog'
+import {
+  Plus,
+  LayoutList,
+  Package,
+  AlertTriangle,
+  Sparkles,
+  Trash2,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function Home() {
@@ -17,12 +26,16 @@ export default function Home() {
     setEditingRecord,
     checkResults,
     getFilteredRecords,
+    getFilteredCheckResults,
     seedDemoData,
     clearAll,
     records,
+    checkScope,
   } = useWristbandStore()
 
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
   const filteredRecords = getFilteredRecords()
+  const visibleCheckResults = getFilteredCheckResults()
   const isEmpty = records.length === 0
 
   return (
@@ -37,7 +50,7 @@ export default function Home() {
               <h1 className="text-lg font-bold tracking-tight">活动手环颜色分组</h1>
             </div>
 
-            {checkResults.length > 0 && (
+            {visibleCheckResults.length > 0 && (
               <button
                 onClick={() => {
                   const el = document.getElementById('check-panel')
@@ -46,7 +59,10 @@ export default function Home() {
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-xs text-red-400 hover:bg-red-500/20 transition-colors"
               >
                 <AlertTriangle size={12} />
-                {checkResults.length} 项检查异常
+                {visibleCheckResults.length} 项异常
+                {checkScope === 'filtered' && checkResults.length > visibleCheckResults.length && (
+                  <span className="text-zinc-500">/ {checkResults.length}</span>
+                )}
               </button>
             )}
           </div>
@@ -81,7 +97,7 @@ export default function Home() {
 
             {!isEmpty && (
               <button
-                onClick={clearAll}
+                onClick={() => setShowClearConfirm(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-red-400 text-xs font-medium transition-colors border border-zinc-700/50"
               >
                 <Trash2 size={13} />
@@ -113,7 +129,8 @@ export default function Home() {
               <div>
                 <h3 className="text-sm font-semibold text-zinc-200 mb-1">快速体验</h3>
                 <p className="text-xs text-zinc-500 leading-relaxed">
-                  当前没有数据。点击「加载演示数据」可快速生成 12 条示例条目，覆盖各类自动检查场景（颜色重复映射、数量为零可发放、责任人堆积、优先级断档）。
+                  当前没有数据。点击「加载演示数据」可快速生成 12
+                  条示例条目，覆盖各类自动检查场景（颜色重复映射、数量为零可发放、责任人堆积、优先级断档）。
                 </p>
               </div>
             </div>
@@ -143,6 +160,20 @@ export default function Home() {
 
       {showForm && <RecordForm />}
       <BatchActions />
+
+      <ConfirmDialog
+        open={showClearConfirm}
+        onCancel={() => setShowClearConfirm(false)}
+        onConfirm={() => {
+          clearAll()
+          setShowClearConfirm(false)
+        }}
+        title="确认清空全部数据？"
+        message="此操作将删除全部本地手环记录，且无法恢复。请确认后再操作。"
+        confirmText="确认清空"
+        cancelText="取消"
+        variant="danger"
+      />
     </div>
   )
 }
