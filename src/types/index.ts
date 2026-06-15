@@ -30,7 +30,35 @@ export interface CheckResult {
   recordIds: string[]
 }
 
-export type ViewMode = 'table' | 'batch' | 'handover'
+export type ViewMode = 'table' | 'batch' | 'handover' | 'discrepancy'
+
+export type DiscrepancyType = '数量差异' | '暂缓发放' | '退回复核' | '备注异常'
+
+export type DiscrepancyStatus = '待处理' | '处理中' | '已处理'
+
+export type DiscrepancyResult = '已补发' | '已调整' | '已取消' | '其他'
+
+export interface DiscrepancyRecord {
+  id: string
+  recordId: string
+  type: DiscrepancyType
+  description: string
+  affectedQty: number
+  status: DiscrepancyStatus
+  result: DiscrepancyResult | ''
+  resolution: string
+  createdAt: string
+  resolvedAt: string | null
+}
+
+export interface DiscrepancyFilter {
+  batchName: string
+  color: string
+  responsiblePerson: string
+  handoverStatus: HandoverStatus | ''
+  type: DiscrepancyType | ''
+  status: DiscrepancyStatus | ''
+}
 
 export type HandoverStatus = '待确认' | '已确认' | '暂缓' | '退回复核'
 

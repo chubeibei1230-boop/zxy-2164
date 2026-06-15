@@ -7,6 +7,7 @@ import BatchActions from '@/components/BatchActions'
 import CheckPanel from '@/components/CheckPanel'
 import BatchOverview from '@/components/BatchOverview'
 import HandoverChecklist from '@/components/HandoverChecklist'
+import DiscrepancyHandler from '@/components/DiscrepancyHandler'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import {
   Plus,
@@ -16,6 +17,7 @@ import {
   Sparkles,
   Trash2,
   ClipboardList,
+  FileWarning,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -107,6 +109,18 @@ export default function Home() {
                 <ClipboardList size={13} />
                 发放交接
               </button>
+              <button
+                onClick={() => setViewMode('discrepancy')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                  viewMode === 'discrepancy'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                )}
+              >
+                <FileWarning size={13} />
+                差异处理
+              </button>
             </div>
 
             {!isEmpty && (
@@ -173,8 +187,10 @@ export default function Home() {
           <RecordTable />
         ) : viewMode === 'batch' ? (
           <BatchOverview />
-        ) : (
+        ) : viewMode === 'handover' ? (
           <HandoverChecklist />
+        ) : (
+          <DiscrepancyHandler />
         )}
       </main>
 

@@ -9,6 +9,11 @@ import {
   HandoverRecord,
   HandoverStatus,
   HandoverQuickFilter,
+  DiscrepancyRecord,
+  DiscrepancyFilter,
+  DiscrepancyType,
+  DiscrepancyStatus,
+  DiscrepancyResult,
 } from '@/types'
 import { runChecks } from '@/utils/validators'
 
@@ -28,6 +33,8 @@ interface WristbandStore {
   handoverRecords: HandoverRecord[]
   handoverQuickFilter: HandoverQuickFilter
   handoverPersonFilter: string
+  discrepancyRecords: DiscrepancyRecord[]
+  discrepancyFilter: DiscrepancyFilter
 
   addRecord: (record: Omit<WristbandRecord, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateRecord: (id: string, data: Partial<WristbandRecord>) => void
@@ -53,6 +60,13 @@ interface WristbandStore {
   setHandoverQuickFilter: (filter: HandoverQuickFilter) => void
   setHandoverPersonFilter: (person: string) => void
   resetHandoverStatuses: () => void
+  addDiscrepancy: (data: Omit<DiscrepancyRecord, 'id' | 'createdAt' | 'resolvedAt'>) => void
+  updateDiscrepancy: (id: string, data: Partial<Pick<DiscrepancyRecord, 'status' | 'result' | 'resolution'>>) => void
+  deleteDiscrepancy: (id: string) => void
+  setDiscrepancyFilter: (filter: Partial<DiscrepancyFilter>) => void
+  resetDiscrepancyFilter: () => void
+  getFilteredDiscrepancies: () => DiscrepancyRecord[]
+  resolveDiscrepancy: (id: string, result: DiscrepancyResult, resolution: string) => void
 }
 
 function buildDemoData(): WristbandRecord[] {
@@ -88,6 +102,15 @@ const defaultFilters: FilterState = {
   priority: '',
 }
 
+const defaultDiscrepancyFilter: DiscrepancyFilter = {
+  batchName: '',
+  color: '',
+  responsiblePerson: '',
+  handoverStatus: '',
+  type: '',
+  status: '',
+}
+
 function matchesFilters(record: WristbandRecord, filters: FilterState) {
   if (filters.color && record.color !== filters.color) return false
   if (filters.responsiblePerson && record.responsiblePerson !== filters.responsiblePerson) return false
@@ -110,6 +133,8 @@ export const useWristbandStore = create<WristbandStore>()(
       handoverRecords: [],
       handoverQuickFilter: 'all',
       handoverPersonFilter: '',
+      discrepancyRecords: [],
+      discrepancyFilter: { ...defaultDiscrepancyFilter },
 
       addRecord: (record) => {
         const now = new Date().toISOString()
@@ -238,11 +263,84 @@ export const useWristbandStore = create<WristbandStore>()(
       seedDemoData: () => {
         const records = buildDemoData()
         const checkResults = runChecks(records)
-        set({ records, checkResults })
+        const now = new Date().toISOString()
+        const yesterday = new Date(Date.now() - 86400000).toISOString()
+        const twoHoursAgo = new Date(Date.now() - 7200000).toISOString()
+
+        const discrepancyRecords: DiscrepancyRecord[] = [
+          {
+            id: generateId(),
+            recordId: records[0].id,
+            type: '数量差异',
+            description: '现场清点发现红色A批次VIP手环缺少5个，实际到货95个，登记100个',
+            affectedQty: 5,
+            status: '待处理',
+            result: '',
+            resolution: '',
+            createdAt: twoHoursAgo,
+            resolvedAt: null,
+          },
+          {
+            id: generateId(),
+            recordId: records[5].id,
+            type: '暂缓发放',
+            description: '黄色A批次媒体人员手环因嘉宾名单调整，暂时无法发放',
+            affectedQty: 40,
+            status: '处理中',
+            result: '',
+            resolution: '',
+            createdAt: yesterday,
+            resolvedAt: null,
+          },
+          {
+            id: generateId(),
+            recordId: records[2].id,
+            type: '退回复核',
+            description: '蓝色A批次普通观众手环颜色存在轻微色差，退回仓库重新质检',
+            affectedQty: 20,
+            status: '已处理',
+            result: '已调整',
+            resolution: '已联系供应商更换，新批次已到仓并通过质检，状态已更新为可发放',
+            createdAt: yesterday,
+            resolvedAt: now,
+          },
+          {
+            id: generateId(),
+            recordId: records[6].id,
+            type: '备注异常',
+            description: '紫色D批次赞助商手环备注标注"数量偏少"，需确认最终发放数量',
+            affectedQty: 0,
+            status: '待处理',
+            result: '',
+            resolution: '',
+            createdAt: twoHoursAgo,
+            resolvedAt: null,
+          },
+          {
+            id: generateId(),
+            recordId: records[11].id,
+            type: '数量差异',
+            description: '黑色C批次安保手环多出3个，需确认是否为额外备货',
+            affectedQty: 3,
+            status: '已处理',
+            result: '其他',
+            resolution: '确认为备用手环，已登记入库留作应急使用',
+            createdAt: yesterday,
+            resolvedAt: twoHoursAgo,
+          },
+        ]
+
+        const handoverRecords: HandoverRecord[] = records.slice(0, 4).map((r, idx) => ({
+          recordId: r.id,
+          status: (['已确认', '待确认', '暂缓', '退回复核'] as HandoverStatus[])[idx],
+          updatedAt: now,
+        }))
+
+        set({ records, checkResults, discrepancyRecords, handoverRecords })
       },
 
       clearAll: () => {
-        set({ records: [], checkResults: [], selectedIds: [], handoverRecords: [] })
+        set({ records: [], checkResults: [], selectedIds: [], handoverRecords: [], discrepancyRecords: [] })
       },
 
       setHandoverStatus: (recordId, status) => {
@@ -286,6 +384,108 @@ export const useWristbandStore = create<WristbandStore>()(
         set({ handoverPersonFilter: person })
       },
 
+      addDiscrepancy: (data) => {
+        const now = new Date().toISOString()
+        const newRecord: DiscrepancyRecord = {
+          ...data,
+          id: generateId(),
+          createdAt: now,
+          resolvedAt: null,
+        }
+        set((state) => ({
+          discrepancyRecords: [...state.discrepancyRecords, newRecord],
+        }))
+      },
+
+      updateDiscrepancy: (id, data) => {
+        set((state) => ({
+          discrepancyRecords: state.discrepancyRecords.map((d) =>
+            d.id === id ? { ...d, ...data } : d
+          ),
+        }))
+      },
+
+      deleteDiscrepancy: (id) => {
+        set((state) => ({
+          discrepancyRecords: state.discrepancyRecords.filter((d) => d.id !== id),
+        }))
+      },
+
+      setDiscrepancyFilter: (filter) => {
+        set((state) => ({
+          discrepancyFilter: { ...state.discrepancyFilter, ...filter },
+        }))
+      },
+
+      resetDiscrepancyFilter: () => {
+        set({ discrepancyFilter: { ...defaultDiscrepancyFilter } })
+      },
+
+      getFilteredDiscrepancies: () => {
+        const { discrepancyRecords, discrepancyFilter, records } = get()
+        return discrepancyRecords.filter((d) => {
+          const record = records.find((r) => r.id === d.recordId)
+          if (!record) return false
+          if (discrepancyFilter.batchName && record.batchName !== discrepancyFilter.batchName) return false
+          if (discrepancyFilter.color && record.color !== discrepancyFilter.color) return false
+          if (discrepancyFilter.responsiblePerson && record.responsiblePerson !== discrepancyFilter.responsiblePerson) return false
+          if (discrepancyFilter.handoverStatus) {
+            const hs = get().getHandoverStatus(record.id)
+            if (hs !== discrepancyFilter.handoverStatus) return false
+          }
+          if (discrepancyFilter.type && d.type !== discrepancyFilter.type) return false
+          if (discrepancyFilter.status && d.status !== discrepancyFilter.status) return false
+          return true
+        })
+      },
+
+      resolveDiscrepancy: (id, result, resolution) => {
+        const now = new Date().toISOString()
+        set((state) => {
+          const disc = state.discrepancyRecords.find((d) => d.id === id)
+          if (!disc) return state
+
+          const updated = state.discrepancyRecords.map((d) =>
+            d.id === id
+              ? { ...d, status: '已处理' as DiscrepancyStatus, result, resolution, resolvedAt: now }
+              : d
+          )
+
+          const recordId = disc.recordId
+          let handoverRecords = state.handoverRecords
+          let records = state.records
+
+          if (disc.type === '退回复核' && result === '已调整') {
+            const existing = handoverRecords.find((h) => h.recordId === recordId)
+            if (existing) {
+              handoverRecords = handoverRecords.map((h) =>
+                h.recordId === recordId ? { ...h, status: '已确认' as HandoverStatus, updatedAt: now } : h
+              )
+            } else {
+              handoverRecords = [...handoverRecords, { recordId, status: '已确认' as HandoverStatus, updatedAt: now }]
+            }
+            records = records.map((r) =>
+              r.id === recordId ? { ...r, status: '可发放' as WristbandStatus, updatedAt: now } : r
+            )
+          } else if (disc.type === '暂缓发放' && result === '已取消') {
+            const existing = handoverRecords.find((h) => h.recordId === recordId)
+            if (existing) {
+              handoverRecords = handoverRecords.map((h) =>
+                h.recordId === recordId ? { ...h, status: '已确认' as HandoverStatus, updatedAt: now } : h
+              )
+            } else {
+              handoverRecords = [...handoverRecords, { recordId, status: '已确认' as HandoverStatus, updatedAt: now }]
+            }
+            records = records.map((r) =>
+              r.id === recordId ? { ...r, status: '可发放' as WristbandStatus, updatedAt: now } : r
+            )
+          }
+
+          const checkResults = runChecks(records)
+          return { discrepancyRecords: updated, handoverRecords, records, checkResults }
+        })
+      },
+
       resetHandoverStatuses: () => {
         set({ handoverRecords: [] })
       },
@@ -295,6 +495,7 @@ export const useWristbandStore = create<WristbandStore>()(
       partialize: (state) => ({
         records: state.records,
         handoverRecords: state.handoverRecords,
+        discrepancyRecords: state.discrepancyRecords,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
