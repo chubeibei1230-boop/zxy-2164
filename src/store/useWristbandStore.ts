@@ -77,6 +77,14 @@ const defaultFilters: FilterState = {
   priority: '',
 }
 
+function matchesFilters(record: WristbandRecord, filters: FilterState) {
+  if (filters.color && record.color !== filters.color) return false
+  if (filters.responsiblePerson && record.responsiblePerson !== filters.responsiblePerson) return false
+  if (filters.status && record.status !== filters.status) return false
+  if (filters.priority !== '' && record.priority !== filters.priority) return false
+  return true
+}
+
 export const useWristbandStore = create<WristbandStore>()(
   persist(
     (set, get) => ({
@@ -109,8 +117,12 @@ export const useWristbandStore = create<WristbandStore>()(
           const records = state.records.map((r) =>
             r.id === id ? { ...r, ...data, updatedAt: new Date().toISOString() } : r
           )
+          const visibleIdSet = new Set(
+            records.filter((r) => matchesFilters(r, state.filters)).map((r) => r.id)
+          )
+          const selectedIds = state.selectedIds.filter((sid) => visibleIdSet.has(sid))
           const checkResults = runChecks(records)
-          return { records, checkResults }
+          return { records, selectedIds, checkResults }
         })
       },
 
@@ -136,15 +148,7 @@ export const useWristbandStore = create<WristbandStore>()(
       setFilters: (newFilters) => {
         set((state) => {
           const nextFilters = { ...state.filters, ...newFilters }
-          const visibleIds = state.records
-            .filter((r) => {
-              if (nextFilters.color && r.color !== nextFilters.color) return false
-              if (nextFilters.responsiblePerson && r.responsiblePerson !== nextFilters.responsiblePerson) return false
-              if (nextFilters.status && r.status !== nextFilters.status) return false
-              if (nextFilters.priority !== '' && r.priority !== nextFilters.priority) return false
-              return true
-            })
-            .map((r) => r.id)
+          const visibleIds = state.records.filter((r) => matchesFilters(r, nextFilters)).map((r) => r.id)
           const visibleIdSet = new Set(visibleIds)
           const nextSelected = state.selectedIds.filter((id) => visibleIdSet.has(id))
           return { filters: nextFilters, selectedIds: nextSelected }
@@ -202,48 +206,13 @@ export const useWristbandStore = create<WristbandStore>()(
 
       getFilteredRecords: () => {
         const { records, filters } = get()
-        return records.filter((r) => {
-          if (filters.color && r.color !== filters.color) return false
-          if (filters.responsiblePerson && r.responsiblePerson !== filters.responsiblePerson) return false
-          if (filters.status && r.status !== filters.status) return false
-          if (filters.priority !== '' && r.priority !== filters.priority) return false
-          return true
-        })
+        return records.filter((r) => matchesFilters(r, filters))
       },
 
       getFilteredCheckResults: () => {
         const { checkResults, checkScope, records, filters } = get()
         if (checkScope === 'all') return checkResults
-
-        const visibleRecords = records.filter((r) => {
-          if (filters.color && r.color !== filters.color) return false
-          if (filters.responsiblePerson && r.responsiblePerson !== filters.responsiblePerson) return false
-          if (filters.status && r.status !== filters.status) return false
-          if (filters.priority !== '' && r.priority !== filters.priority) return false
-          return true
-        })
-        const visibleIdSet = new Set(visibleRecords.map((r) => r.id))
-
-        const filtered: CheckResult[] = []
-        for (const c of checkResults) {
-          const visibleRecordIds = c.recordIds.filter((id) => visibleIdSet.has(id))
-          if (visibleRecordIds.length > 0) {
-            let msg = c.message
-            if (c.type === '颜色重复映射') {
-              const colors = new Set(visibleRecords.map((r) => r.color))
-              const batches = new Set(visibleRecords.map((r) => r.batchName))
-              const groups = new Set(visibleRecords.map((r) => r.targetGroup))
-              msg = `颜色「${[...colors].join('、')}」出现在 ${batches.size} 个批次、${groups.size} 个不同人群中，可能存在映射冲突`
-            } else if (c.type === '数量为零可发放') {
-              msg = `${visibleRecordIds.length} 条记录数量为 0 但状态为「可发放」，请核实`
-            } else if (c.type === '责任人堆积') {
-              const persons = new Set(visibleRecords.map((r) => r.responsiblePerson))
-              msg = `「${[...persons].join('、')}」负责的高优先级条目超过阈值，建议分散`
-            }
-            filtered.push({ ...c, message: msg, recordIds: visibleRecordIds })
-          }
-        }
-        return filtered
+        return runChecks(records.filter((r) => matchesFilters(r, filters)))
       },
 
       runAutoCheck: () => {
