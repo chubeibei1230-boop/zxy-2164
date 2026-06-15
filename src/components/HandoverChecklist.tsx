@@ -79,6 +79,7 @@ export default function HandoverChecklist() {
     for (const r of filtered) {
       const hs = getHandoverStatus(r.id)
       if (r.notes && r.notes.trim() !== '') ids.add(r.id)
+      if (r.status === '暂缓') ids.add(r.id)
       if (hs === '暂缓' || hs === '退回复核') ids.add(r.id)
     }
     return ids
@@ -112,8 +113,8 @@ export default function HandoverChecklist() {
     for (const r of filtered) {
       totalQty += r.quantity
       const hs = getHandoverStatus(r.id)
-      if (hs === '待确认') pendingQty += r.quantity
-      if (hs === '暂缓') suspendedQty += r.quantity
+      if (hs === '待确认' && r.status !== '暂缓') pendingQty += r.quantity
+      if (hs === '暂缓' || (hs === '待确认' && r.status === '暂缓')) suspendedQty += r.quantity
       if (abnormalQuickFilterIds.has(r.id)) abnormalCount += 1
     }
 
@@ -215,7 +216,7 @@ export default function HandoverChecklist() {
         </div>
       </div>
 
-      <HandoverOverview onNavigateToRecord={navigateToRecord} />
+      <HandoverOverview records={displayRecords} onNavigateToRecord={navigateToRecord} />
 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center bg-zinc-900/80 border border-zinc-800/60 rounded-lg p-0.5 flex-wrap">

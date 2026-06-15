@@ -82,8 +82,8 @@ function computeSummaries(
       const hs = getHandoverStatus(r.id)
       totalQty += r.quantity
       if (hs === '已确认') confirmedQty += r.quantity
-      if (hs === '待确认') pendingQty += r.quantity
-      if (hs === '暂缓') suspendedQty += r.quantity
+      if (hs === '待确认' && r.status !== '暂缓') pendingQty += r.quantity
+      if (hs === '暂缓' || (hs === '待确认' && r.status === '暂缓')) suspendedQty += r.quantity
       if (hs === '退回复核') returnReviewQty += r.quantity
     }
 
@@ -95,8 +95,12 @@ function computeSummaries(
     if (returnReviewQty > 0) {
       risks.push(`${returnReviewQty}个退回复核`)
     }
+    const hasWristbandSuspended = recs.some((r) => getHandoverStatus(r.id) === '待确认' && r.status === '暂缓')
     if (suspendedQty > 0) {
       risks.push(`${suspendedQty}个暂缓`)
+    }
+    if (hasWristbandSuspended) {
+      risks.push('存在手环暂缓未决策')
     }
     if (totalQty === 0) {
       risks.push('总数量为0')
@@ -110,11 +114,11 @@ function computeSummaries(
       risks.push(`异常占比${abnormalPct.toFixed(0)}%过高`)
     }
 
-    const hasRisk = returnReviewQty > 0 || suspendedQty > 0 || pendingQty > 0 || accountedSum !== totalQty
+    const hasRisk = returnReviewQty > 0 || suspendedQty > 0 || pendingQty > 0 || totalQty === 0 || accountedSum !== totalQty
     const confirmedPct = totalQty > 0 ? Math.round((confirmedQty / totalQty) * 100) : 0
 
     let groupStatus: GroupStatus
-    if (returnReviewQty > 0 || (totalQty > 0 && accountedSum !== totalQty)) {
+    if (returnReviewQty > 0 || totalQty === 0 || (totalQty > 0 && accountedSum !== totalQty)) {
       groupStatus = 'at_risk'
     } else if (suspendedQty > 0) {
       groupStatus = 'at_risk'
@@ -282,7 +286,7 @@ function RiskBadge({ risks }: { risks: string[] }) {
             'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border',
             r.includes('退回复核')
               ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-              : r.includes('数量异常')
+              : r.includes('数量异常') || r.includes('总数量')
                 ? 'bg-red-500/20 text-red-300 border-red-500/40'
                 : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
           )}
@@ -301,16 +305,19 @@ function ReadinessBanner({
   pendingQty,
   suspendedQty,
   returnReviewQty,
+  zeroQtyGroups,
 }: {
   totalQty: number
   confirmedQty: number
   pendingQty: number
   suspendedQty: number
   returnReviewQty: number
+  zeroQtyGroups: number
 }) {
   const pct = totalQty > 0 ? Math.round((confirmedQty / totalQty) * 100) : 0
   const unresolvedRisk = returnReviewQty > 0
   const unresolvedSuspended = suspendedQty > 0
+  const quantityRisk = zeroQtyGroups > 0
   const hasPending = pendingQty > 0
 
   let level: 'ready' | 'almost' | 'not_ready'
@@ -318,22 +325,23 @@ function ReadinessBanner({
   let message: string
   let bannerClass: string
 
-  if (pct === 100 && !unresolvedRisk && !unresolvedSuspended) {
+  if (pct === 100 && !unresolvedRisk && !unresolvedSuspended && !quantityRisk) {
     level = 'ready'
     icon = ShieldCheck
     message = '所有手环已确认发放，可以开始活动！'
     bannerClass = 'bg-emerald-500/10 border-emerald-500/30'
-  } else if (!unresolvedRisk && !unresolvedSuspended && pct >= 80) {
+  } else if (!unresolvedRisk && !unresolvedSuspended && !quantityRisk && pct >= 80) {
     level = 'almost'
     icon = ShieldAlert
     message = `发放进度良好（${pct}%），仍有 ${pendingQty} 个待确认，建议尽快完成确认。`
     bannerClass = 'bg-sky-500/10 border-sky-500/30'
-  } else if (unresolvedRisk || unresolvedSuspended) {
+  } else if (unresolvedRisk || unresolvedSuspended || quantityRisk) {
     level = 'not_ready'
     icon = ShieldX
     const parts: string[] = []
     if (unresolvedRisk) parts.push(`${returnReviewQty}个退回复核待处理`)
     if (unresolvedSuspended) parts.push(`${suspendedQty}个暂缓待决策`)
+    if (quantityRisk) parts.push(`${zeroQtyGroups}组数量异常`)
     if (hasPending) parts.push(`${pendingQty}个待确认`)
     message = `存在未闭环问题：${parts.join('、')}。请在活动前完成处理！`
     bannerClass = 'bg-rose-500/10 border-rose-500/30'
@@ -401,19 +409,19 @@ function ReadinessBanner({
 
 export default function HandoverOverview({
   onNavigateToRecord,
+  records,
 }: {
   onNavigateToRecord: (recordId: string) => void
+  records: ReturnType<typeof useWristbandStore.getState>['records']
 }) {
-  const { getFilteredRecords, getHandoverStatus } = useWristbandStore()
+  const { getHandoverStatus } = useWristbandStore()
 
   const [dimension, setDimension] = useState<Dimension>('batch')
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
 
-  const filtered = getFilteredRecords()
-
   const summaries = useMemo(
-    () => computeSummaries(filtered, getHandoverStatus, dimension),
-    [filtered, getHandoverStatus, dimension]
+    () => computeSummaries(records, getHandoverStatus, dimension),
+    [records, getHandoverStatus, dimension]
   )
 
   const overallStats = useMemo(() => {
@@ -422,18 +430,20 @@ export default function HandoverOverview({
     let pendingQty = 0
     let suspendedQty = 0
     let returnReviewQty = 0
+    let zeroQtyGroups = 0
     for (const s of summaries) {
       totalQty += s.totalQty
       confirmedQty += s.confirmedQty
       pendingQty += s.pendingQty
       suspendedQty += s.suspendedQty
       returnReviewQty += s.returnReviewQty
+      if (s.totalQty === 0) zeroQtyGroups += 1
     }
     const globalPct = totalQty > 0 ? Math.round((confirmedQty / totalQty) * 100) : 0
-    return { totalQty, confirmedQty, pendingQty, suspendedQty, returnReviewQty, globalPct }
+    return { totalQty, confirmedQty, pendingQty, suspendedQty, returnReviewQty, zeroQtyGroups, globalPct }
   }, [summaries])
 
-  const hasGlobalRisk = overallStats.returnReviewQty > 0 || overallStats.suspendedQty > 0
+  const hasGlobalRisk = overallStats.returnReviewQty > 0 || overallStats.suspendedQty > 0 || overallStats.zeroQtyGroups > 0
 
   const toggleExpand = (key: string) => {
     setExpandedKeys((prev) => {
@@ -451,7 +461,7 @@ export default function HandoverOverview({
   ]
 
   const getRecordsForGroup = (groupKey: string) => {
-    return filtered.filter((r) => {
+    return records.filter((r) => {
       if (dimension === 'batch') return r.batchName === groupKey
       if (dimension === 'person') return r.responsiblePerson === groupKey
       return r.color === groupKey
@@ -507,6 +517,7 @@ export default function HandoverOverview({
           pendingQty={overallStats.pendingQty}
           suspendedQty={overallStats.suspendedQty}
           returnReviewQty={overallStats.returnReviewQty}
+          zeroQtyGroups={overallStats.zeroQtyGroups}
         />
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
@@ -572,6 +583,12 @@ export default function HandoverOverview({
               {overallStats.returnReviewQty > 0 && overallStats.suspendedQty > 0 && <span>，</span>}
               {overallStats.suspendedQty > 0 && (
                 <span>有 <strong>{overallStats.suspendedQty}</strong> 个暂缓待决策</span>
+              )}
+              {overallStats.zeroQtyGroups > 0 && (
+                <span>
+                  {overallStats.returnReviewQty > 0 || overallStats.suspendedQty > 0 ? '，' : ' '}
+                  <strong>{overallStats.zeroQtyGroups}</strong> 组数量异常
+                </span>
               )}
               ，请尽快处理以确保活动前发放闭环。
             </div>
@@ -716,7 +733,7 @@ export default function HandoverOverview({
                       title="定位到该组全部明细记录"
                     >
                       <Locate size={10} />
-                      全部定位
+                      定位首条
                     </button>
 
                     {s.risks.length > 0 && (
